@@ -4,7 +4,7 @@
 
 **Dino's Pet-Skills** ist ein kompaktes Sammlungs-Addon für **WoW Forever**: Es speichert **dauerhaft für deinen Charakter**, welche durch Pets erlernbaren Fähigkeiten und Ränge dein Jäger bereits gesammelt hat – ganz egal, welches Pet du gerade aktiv bei dir hast oder ob du ein Tier längst wieder freigelassen hast.
 
-![Dino's Pet-Skills Screenshot](Media/screenshot.jpg)
+![Dino's Pet-Skills Screenshot](screenshot.jpg)
 
 ---
 
