@@ -40,13 +40,13 @@ end
 
 local function famList(rec, max)
   if rec.key == "Cower" then
-    return "|cff66ddff★ Alle Pets|r"
+    return "|cff66ddff[Alle Pets]|r"
   elseif rec.kind == "common" then
-    return "|cff66ddff★ Fast alle Pets (" .. #(rec.fams or {}) .. " Familien)|r"
+    return "|cff66ddff[Fast alle Pets · " .. #(rec.fams or {}) .. " Familien]|r"
   end
   local names = {}
   for i, slug in ipairs(rec.fams) do
-    if i > (max or 3) then names[#names + 1] = "…" break end
+    if i > (max or 3) then names[#names + 1] = "..." break end
     names[#names + 1] = ns.FamilyName(slug)
   end
   if #names == 0 then return "" end
@@ -116,7 +116,7 @@ local function buildRows()
               addedSharedHeader = true
               displayRows[#displayRows + 1] = {
                 kind = "header",
-                title = "|cff66ddff★ Allgemeine Fähigkeiten (für fast alle Pets)|r",
+                title = "|cff66ddffAllgemeine Fähigkeiten (für fast alle Pets)|r",
               }
             end
           else
@@ -124,7 +124,7 @@ local function buildRows()
               addedSpecialHeader = true
               displayRows[#displayRows + 1] = {
                 kind = "header",
-                title = "|cffffd100◆ Familien-Spezialfähigkeiten (je nach Tierart)|r",
+                title = "|cffffd100Familien-Spezialfähigkeiten (je nach Tierart)|r",
               }
             end
           end
@@ -249,7 +249,7 @@ local function onRowEnter(btn)
     GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
     GameTooltip:AddLine(ns.SkillName(row.rec))
     if isSharedSkill(row.rec) then
-      GameTooltip:AddLine("★ Allgemeine Pet-Fähigkeit (für mehrere Tierfamilien)", 0.4, 0.87, 1, true)
+      GameTooltip:AddLine("Allgemeine Pet-Fähigkeit (für mehrere Tierfamilien)", 0.4, 0.87, 1, true)
     end
     local fam = famListFull(row.rec)
     if fam ~= "" then GameTooltip:AddLine("Familien: " .. fam, 0.85, 0.85, 0.85, true) end
