@@ -4,6 +4,8 @@
 
 **Dino's Pet-Skills** erweitert **Forever Bestiary (Pet Hunter)** in **WoW Forever** um ein dauerhaftes, charakterweites Übersichtsfenster für alle Jäger-Pet-Fähigkeiten und Ränge – unabhängig davon, welches Pet du gerade aktiv bei dir hast.
 
+![Dino's Pet-Skills Screenshot](Media/screenshot.jpg)
+
 ---
 
 ## ⚠️ Voraussetzung (Abhängigkeit)
@@ -36,6 +38,8 @@ In der `DinosPetSkills.toc` ist diese Abhängigkeit fest über `## Dependencies:
   Zeigt nur Fähigkeiten an, die man durch Wildtiere erhalten kann (keine Ausbilder-Widerstände, keine Rüstungs-/Ausdauer-Passiva, kein Knurren).
 - **Kompakte, eingeklappte Übersicht + separates Wildtier-Seitenfenster:**
   Alle Fähigkeiten starten übersichtlich zugeklappt. Ein Klick auf einen Rang öffnet rechts daneben ein separates Seitenfenster mit allen möglichen Wildtieren (Familie, Level, Zone, Zähmbarkeit).
+- **3 Schriftgrößen (`S` / `M` / `L`):**
+  Oben rechts im Fenster lässt sich die Schriftgröße jederzeit in 3 Stufen umschalten.
 
 ---
 

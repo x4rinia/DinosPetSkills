@@ -109,7 +109,7 @@ local DEFAULTS = {
   custom = {},      -- (Reserviert)
   learnedAt = {},   -- [Schlüssel#Rang] = Zeitpunkt des ersten Einlesens
   minimap = { angle = 200, hide = false },
-  ui = { filter = "all" },
+  ui = { filter = "all", fontSize = 2 },
 }
 
 local function applyDefaults(db, def)

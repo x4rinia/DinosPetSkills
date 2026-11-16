@@ -15,9 +15,33 @@ local frame, scroll, rowsUI, progress, progressText, petLine, footer, searchBox,
 local beastFrame, beastScroll, beastRowsUI, beastTitle, beastSub, beastFooter
 local selectedRank       -- { rec = rec, r = r, beasts = list }
 local filterButtons = {}
+local fontButtons = {}
 local displayRows = {}
 local expandedSkill = {} -- [Schlüssel] = true: Fähigkeit aufgeklappt (Standard: IMMER alle zugeklappt!)
 ns.searchText = ""
+
+local FONT_SIZES = { [1] = 10, [2] = 12, [3] = 14 }
+
+local function applyFontSize()
+  local idx = (DinosPetSkillsDB and DinosPetSkillsDB.ui and DinosPetSkillsDB.ui.fontSize) or 2
+  local sz = FONT_SIZES[idx] or 12
+  local face, _, flags = GameFontHighlightSmall:GetFont()
+  if not face then return end
+  for _, b in ipairs(rowsUI or {}) do
+    b.left:SetFont(face, sz, flags)
+    b.right:SetFont(face, sz, flags)
+  end
+  for _, b in ipairs(beastRowsUI or {}) do
+    b.left:SetFont(face, sz, flags)
+    b.right:SetFont(face, sz, flags)
+  end
+  if petLine then petLine:SetFont(face, sz, flags) end
+  if progressText then progressText:SetFont(face, sz, flags) end
+  if beastSub then beastSub:SetFont(face, sz, flags) end
+  for k, btn in pairs(fontButtons) do
+    if k == idx then btn:LockHighlight() else btn:UnlockHighlight() end
+  end
+end
 
 local BACKDROP = BackdropTemplateMixin and "BackdropTemplate" or nil
 
@@ -294,6 +318,7 @@ local function buildBeastFrame()
   beastFooter:SetPoint("BOTTOMLEFT", 18, 14)
   beastFooter:SetPoint("RIGHT", -18, 0)
   beastFooter:SetJustifyH("LEFT")
+  applyFontSize()
   beastFrame:Hide()
 end
 
@@ -432,6 +457,7 @@ end
 
 function ns.RefreshUI()
   if not frame or not frame:IsShown() then return end
+  applyFontSize()
   updateHeader()
   buildRows()
   updateList()
@@ -489,6 +515,36 @@ local function build()
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", -6, -6)
+
+  -- Schriftgröße-Umschalter (3 Stufen: S / M / L) oben rechts
+  local fLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  fLabel:SetText("Schrift:")
+  local FONT_LABELS = { { 1, "S", "Klein (10 pt)" }, { 2, "M", "Mittel (12 pt)" }, { 3, "L", "Groß (14 pt)" } }
+  local prevBtn
+  for i = #FONT_LABELS, 1, -1 do
+    local info = FONT_LABELS[i]
+    local fb = makeButton(frame, info[2], 24)
+    fb:SetHeight(18)
+    if not prevBtn then
+      fb:SetPoint("TOPRIGHT", close, "TOPLEFT", -4, -7)
+    else
+      fb:SetPoint("RIGHT", prevBtn, "LEFT", -2, 0)
+    end
+    fb:SetScript("OnClick", function()
+      db.ui.fontSize = info[1]
+      applyFontSize()
+      ns.RefreshUI()
+    end)
+    fb:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_TOP")
+      GameTooltip:AddLine("Schriftgröße: " .. info[3], 1, 0.82, 0)
+      GameTooltip:Show()
+    end)
+    fb:SetScript("OnLeave", GameTooltip_Hide)
+    fontButtons[info[1]] = fb
+    prevBtn = fb
+  end
+  fLabel:SetPoint("RIGHT", prevBtn, "LEFT", -5, 0)
 
   -- Maskottchen: Dino, der Ankylosaurus
   local badge = CreateFrame("Frame", nil, frame, BACKDROP)
@@ -632,6 +688,7 @@ local function build()
     b:SetScript("OnLeave", GameTooltip_Hide)
     rowsUI[i] = b
   end
+  applyFontSize()
 
   -- Fuß: Auf-/Zuklappen + Kurzhilfe
   bCollapse = makeButton(frame, "Alle aufklappen", 110)
