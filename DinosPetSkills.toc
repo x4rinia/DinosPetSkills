@@ -1,10 +1,10 @@
 ## Interface: 120001, 16001, 120000, 16000, 11508, 110005, 110000, 11200
-## Title: Dino's Pet-Skills 1.1.1 |cff00ccff(by X4rinia und Dino)|r
-## Notes: Zusatz-Addon für Forever Bestiary (Pet Hunter): Dauerhafte Gesamtübersicht aller gelernten Jäger-Pet-Fähigkeiten, Ränge und lehrenden Wildtiere in WoW Forever. Benötigt ForeverBestiaryPetHunter.
-## Notes-deDE: Zusatz-Addon für Forever Bestiary (Pet Hunter): Dauerhafte Gesamtübersicht aller gelernten Jäger-Pet-Fähigkeiten, Ränge und lehrenden Wildtiere in WoW Forever. Benötigt ForeverBestiaryPetHunter.
-## Notes-enUS: Companion addon for Forever Bestiary (Pet Hunter): Permanent character-wide tracker of all learned Hunter pet abilities, ranks, and beast sources in WoW Forever. Requires ForeverBestiaryPetHunter.
+## Title: Dino's Pet-Skills 1.2.0 |cff00ccff(by X4rinia und Dino)|r
+## Notes: Zusatz-Addon für Forever Bestiary (Pet Hunter): Dauerhafte Sammlung aller gelernten Jäger-Pet-Fähigkeiten & Ränge in WoW Forever. Benötigt ForeverBestiaryPetHunter.
+## Notes-deDE: Zusatz-Addon für Forever Bestiary (Pet Hunter): Dauerhafte Sammlung aller gelernten Jäger-Pet-Fähigkeiten & Ränge in WoW Forever. Benötigt ForeverBestiaryPetHunter.
+## Notes-enUS: Companion addon for Forever Bestiary (Pet Hunter): Permanent character-wide collection of all learned Hunter pet abilities and ranks in WoW Forever. Requires ForeverBestiaryPetHunter.
 ## Author: X4rinia und Dino
-## Version: 1.1.1
+## Version: 1.2.0
 ## Dependencies: ForeverBestiaryPetHunter
 ## RequiredDeps: ForeverBestiaryPetHunter
 ## OptionalDeps: ForeverBestiary

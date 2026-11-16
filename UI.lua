@@ -1,4 +1,4 @@
--- DinosPetSkills · Das Gesamt-Übersichtsfenster "Dino's Pet-Skills" + separates Wildtier-Quellen-Fenster
+-- DinosPetSkills · Das Gesamt-Übersichtsfenster "Dino's Pet-Skills" (reine Sammlung + Direkt-Button zu Forever Bestiary)
 local _, ns = ...
 
 local W, H = 580, 520
@@ -6,14 +6,7 @@ local ROW_H = 20
 local LIST_TOP, LIST_BOTTOM = 150, 42
 local NUM_ROWS = math.floor((H - LIST_TOP - LIST_BOTTOM - 8) / ROW_H)
 
-local SUB_W, SUB_H = 380, 520
-local SUB_ROW_H = 20
-local SUB_TOP, SUB_BOTTOM = 58, 34
-local SUB_NUM_ROWS = math.floor((SUB_H - SUB_TOP - SUB_BOTTOM - 8) / SUB_ROW_H)
-
-local frame, scroll, rowsUI, progress, progressText, petLine, footer, searchBox, bCollapse
-local beastFrame, beastScroll, beastRowsUI, beastTitle, beastSub, beastFooter
-local selectedRank       -- { rec = rec, r = r, beasts = list }
+local frame, scroll, rowsUI, progress, progressText, petLine, footer, searchBox, bCollapse, bBestiary
 local filterButtons = {}
 local fontButtons = {}
 local displayRows = {}
@@ -31,13 +24,8 @@ local function applyFontSize()
     b.left:SetFont(face, sz, flags)
     b.right:SetFont(face, sz, flags)
   end
-  for _, b in ipairs(beastRowsUI or {}) do
-    b.left:SetFont(face, sz, flags)
-    b.right:SetFont(face, sz, flags)
-  end
   if petLine then petLine:SetFont(face, sz, flags) end
   if progressText then progressText:SetFont(face, sz, flags) end
-  if beastSub then beastSub:SetFont(face, sz, flags) end
   for k, btn in pairs(fontButtons) do
     if k == idx then btn:LockHighlight() else btn:UnlockHighlight() end
   end
@@ -45,16 +33,17 @@ end
 
 local BACKDROP = BackdropTemplateMixin and "BackdropTemplate" or nil
 
-local RARITY = {
-  n = nil,
-  r = { "|cffc0c0ff", "Rar" },
-  e = { "|cffffa500", "Elite" },
-  re = { "|cffff80ff", "Rar-Elite" },
-}
-
 -- ------------------------------------------------------------------ Hilfen
+local function isSharedSkill(rec)
+  return rec.kind == "general" or rec.kind == "common"
+end
+
 local function famList(rec, max)
-  if rec.key == "Cower" then return "Alle Familien (durch Wildtiere)" end
+  if rec.key == "Cower" then
+    return "|cff66ddff★ Alle Pets|r"
+  elseif rec.kind == "common" then
+    return "|cff66ddff★ Fast alle Pets (" .. #(rec.fams or {}) .. " Familien)|r"
+  end
   local names = {}
   for i, slug in ipairs(rec.fams) do
     if i > (max or 3) then names[#names + 1] = "…" break end
@@ -64,28 +53,23 @@ local function famList(rec, max)
   return table.concat(names, ", ")
 end
 
+local function famListFull(rec)
+  if rec.key == "Cower" then return "Alle Pet-Familien" end
+  local names = {}
+  for _, slug in ipairs(rec.fams or {}) do
+    names[#names + 1] = ns.FamilyName(slug)
+  end
+  return table.concat(names, ", ")
+end
+
 local function skillMatches(rec, q)
   for _, k in ipairs({ "en", "de", "es", "fr" }) do
     if rec[k] and ns.norm(rec[k]):find(q, 1, true) then return true end
   end
-  return ns.norm(ns.SkillName(rec)):find(q, 1, true) ~= nil
-end
-
-local function beastMatches(b, q)
-  if ns.norm(ns.BeastName(b)):find(q, 1, true) then return true end
-  if b.en and ns.norm(b.en):find(q, 1, true) then return true end
-  if b.de and ns.norm(b.de):find(q, 1, true) then return true end
-  if ns.norm(ns.FamilyName(b.f)):find(q, 1, true) then return true end
-  for _, z in ipairs(ns.BeastZones(b)) do
-    if ns.norm(z):find(q, 1, true) then return true end
+  for _, slug in ipairs(rec.fams or {}) do
+    if ns.norm(ns.FamilyName(slug)):find(q, 1, true) then return true end
   end
-  return false
-end
-
-local function levelText(b)
-  if not b.l1 then return "?" end
-  if b.l2 and b.l2 ~= b.l1 then return b.l1 .. "-" .. b.l2 end
-  return tostring(b.l1)
+  return ns.norm(ns.SkillName(rec)):find(q, 1, true) ~= nil
 end
 
 local function petHint()
@@ -99,41 +83,57 @@ local function makeButton(parent, text, w)
   return b
 end
 
--- ------------------------------------------------------------------ Zeilen aufbauen (nur Skills & Ränge, keine Tiere dazwischen!)
+local function openForeverBestiary(query)
+  local cmd = SlashCmdList and SlashCmdList["FBPETHUNTER"]
+  if cmd then
+    pcall(cmd, query or "")
+  else
+    ns.Print("Forever Bestiary (Pet Hunter) ist nicht geladen.")
+  end
+end
+
+-- ------------------------------------------------------------------ Zeilen aufbauen (mit Abschnitts-Überschriften)
 local function buildRows()
   wipe(displayRows)
   local db = DinosPetSkillsDB
   local mode = db.ui.filter or "all"
   local q = ns.norm(ns.searchText or "")
+  local addedSharedHeader, addedSpecialHeader = false, false
+
   for _, rec in ipairs(ns.skills) do
     if mode ~= "pet" or ns.PetCanUse(rec) then
-      local skillMatch = (q == "") or skillMatches(rec, q)
-      local rankRows = {}
-      for _, r in ipairs(ns.RankList(rec)) do
-        local learned = ns.IsLearned(rec.key, r)
-        if (mode == "all") or (mode == "pet") or (mode == "learned" and learned) or (mode == "missing" and not learned) then
-          local list = ns.sources[rec.key] and ns.sources[rec.key][r] or {}
-          local beasts, matchedBeast = list, false
-          if q ~= "" and not skillMatch then
-            beasts = {}
-            for _, e in ipairs(list) do
-              if beastMatches(e.b, q) then beasts[#beasts + 1] = e end
-            end
-            matchedBeast = #beasts > 0
-          end
-          if skillMatch or matchedBeast then
-            rankRows[#rankRows + 1] = {
-              kind = "rank", rec = rec, r = r, learned = learned,
-              beasts = beasts, total = #list,
-            }
+      if q == "" or skillMatches(rec, q) then
+        local rankRows = {}
+        for _, r in ipairs(ns.RankList(rec)) do
+          local learned = ns.IsLearned(rec.key, r)
+          if (mode == "all") or (mode == "pet") or (mode == "learned" and learned) or (mode == "missing" and not learned) then
+            rankRows[#rankRows + 1] = { kind = "rank", rec = rec, r = r, learned = learned }
           end
         end
-      end
-      if #rankRows > 0 then
-        displayRows[#displayRows + 1] = { kind = "skill", rec = rec }
-        if q ~= "" or expandedSkill[rec.key] then
-          for _, rr in ipairs(rankRows) do
-            displayRows[#displayRows + 1] = rr
+        if #rankRows > 0 then
+          if isSharedSkill(rec) then
+            if not addedSharedHeader then
+              addedSharedHeader = true
+              displayRows[#displayRows + 1] = {
+                kind = "header",
+                title = "|cff66ddff★ Allgemeine Fähigkeiten (für fast alle Pets)|r",
+              }
+            end
+          else
+            if not addedSpecialHeader then
+              addedSpecialHeader = true
+              displayRows[#displayRows + 1] = {
+                kind = "header",
+                title = "|cffffd100◆ Familien-Spezialfähigkeiten (je nach Tierart)|r",
+              }
+            end
+          end
+
+          displayRows[#displayRows + 1] = { kind = "skill", rec = rec }
+          if q ~= "" or expandedSkill[rec.key] then
+            for _, rr in ipairs(rankRows) do
+              displayRows[#displayRows + 1] = rr
+            end
           end
         end
       end
@@ -152,188 +152,14 @@ local function rankTooltip(owner, row)
   if rk.l then GameTooltip:AddLine("Benötigt Pet-Stufe " .. rk.l, 0.8, 0.8, 0.8) end
   GameTooltip:AddLine(" ")
   if ns.IsLearned(rec.key, r) then
-    GameTooltip:AddLine(ns.CHECK .. " Von deinem Jäger dauerhaft erlernt", 0, 1, 0)
+    GameTooltip:AddLine(ns.CHECK .. " In deiner Sammlung (dauerhaft erlernt)", 0, 1, 0)
   else
-    GameTooltip:AddLine(ns.CROSS .. " Noch nie erlernt", 1, 0.27, 0.27)
+    GameTooltip:AddLine(ns.CROSS .. " Noch nicht in deiner Sammlung", 1, 0.27, 0.27)
   end
   if ns.PetHas(rec.key, r) then
     GameTooltip:AddLine("Dein aktuelles Pet (" .. tostring(ns.activePetName) .. ") beherrscht diesen Rang.", 0, 0.8, 1, true)
   end
-  if row.total > 0 then
-    GameTooltip:AddLine(("%d Wildtier(e) lehren diesen Rang – klicken für die extra Tier-Liste."):format(row.total), 1, 0.82, 0, true)
-  else
-    GameTooltip:AddLine("Kein lehrendes Wildtier in der Datenbank bekannt.", 0.6, 0.6, 0.6, true)
-  end
   GameTooltip:Show()
-end
-
-local function beastTooltip(owner, e, rec, r)
-  local b = e.b
-  GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
-  local rar = b.r and RARITY[b.r]
-  GameTooltip:AddLine((rar and rar[1] or "|cffffffff") .. ns.BeastName(b) .. "|r")
-  GameTooltip:AddLine(ns.FamilyName(b.f) .. " · Stufe " .. levelText(b) .. (rar and (" · " .. rar[2]) or ""), 0.8, 0.8, 0.8)
-  local zones = ns.BeastZones(b)
-  if #zones > 0 then GameTooltip:AddLine("Zone: " .. table.concat(zones, ", "), 1, 1, 1, true) end
-  GameTooltip:AddLine("Lehrt: " .. ns.SkillName(rec) .. " (Rang " .. r .. ")", 1, 0.82, 0)
-  local lvl = UnitLevel("player") or 0
-  if not b.l1 or lvl >= b.l1 then
-    GameTooltip:AddLine("Dein Level (" .. lvl .. ") reicht zum Zähmen.", 0, 1, 0)
-  else
-    GameTooltip:AddLine("Zum Zähmen brauchst du Stufe " .. b.l1 .. " (du bist " .. lvl .. ").", 1, 0.27, 0.27)
-  end
-  if SlashCmdList and SlashCmdList["FBPETHUNTER"] then
-    GameTooltip:AddLine("Klicken: im Forever Bestiary öffnen", 0.5, 0.5, 0.5)
-  end
-  GameTooltip:Show()
-end
-
--- ------------------------------------------------------------------ Separates Wildtier-Quellen-Fenster (rechts daneben)
-local function updateBeastList()
-  if not beastFrame or not beastFrame:IsShown() or not selectedRank then return end
-  local list = selectedRank.beasts or {}
-  local rec, r = selectedRank.rec, selectedRank.r
-  beastTitle:SetText(ns.GOLD .. ns.SkillName(rec) .. " (Rang " .. r .. ")|r")
-  local rk = rec.ranks[r] or {}
-  beastSub:SetText((rk.l and ("Benötigt Pet-Stufe " .. rk.l .. " · ") or "")
-    .. (#list == 1 and "1 mögliches Wildtier" or (#list .. " mögliche Wildtiere")))
-  FauxScrollFrame_Update(beastScroll, #list, SUB_NUM_ROWS, SUB_ROW_H)
-  local offset = FauxScrollFrame_GetOffset(beastScroll)
-  local lvl = UnitLevel("player") or 0
-  for i = 1, SUB_NUM_ROWS do
-    local btn = beastRowsUI[i]
-    local e = list[offset + i]
-    if e then
-      local b = e.b
-      btn.entry = e
-      local rar = b.r and RARITY[b.r]
-      local name = (rar and rar[1] or "|cffffffff") .. ns.BeastName(b) .. "|r"
-      local zones = ns.BeastZones(b)
-      local zone = zones[1] and (zones[1] .. (#zones > 1 and (" +" .. (#zones - 1)) or "")) or "Zone unbekannt"
-      btn.left:SetText("• " .. name .. ns.GREY .. " · " .. ns.FamilyName(b.f) .. " (" .. levelText(b) .. ") · " .. zone .. "|r")
-      if not b.l1 or lvl >= b.l1 then
-        btn.right:SetText(ns.GREEN .. "zähmbar|r")
-      else
-        btn.right:SetText(ns.RED .. "ab " .. b.l1 .. "|r")
-      end
-      btn:Show()
-    else
-      btn.entry = nil
-      btn:Hide()
-    end
-  end
-  if #list == 0 then
-    beastFooter:SetText(ns.GREY .. "Für diesen Rang ist aktuell kein lehrendes Wildtier in der Datenbank verzeichnet.|r")
-  else
-    beastFooter:SetText(ns.GREY .. "Tipp: Klicke auf ein Wildtier, um es im Forever Bestiary auf der Karte zu zeigen.|r")
-  end
-end
-
-local function buildBeastFrame()
-  beastFrame = CreateFrame("Frame", "DinosPetSkillsBeastsFrame", frame, BACKDROP)
-  beastFrame:SetSize(SUB_W, SUB_H)
-  beastFrame:SetPoint("TOPLEFT", frame, "TOPRIGHT", 6, 0)
-  beastFrame:SetFrameStrata("HIGH")
-  beastFrame:EnableMouse(true)
-  if beastFrame.SetBackdrop then
-    beastFrame:SetBackdrop({
-      bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-      edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-      tile = true, tileSize = 32, edgeSize = 32,
-      insets = { left = 11, right = 12, top = 12, bottom = 11 },
-    })
-  end
-  local close = CreateFrame("Button", nil, beastFrame, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -6, -6)
-  close:SetScript("OnClick", function()
-    selectedRank = nil
-    beastFrame:Hide()
-    ns.RefreshUI()
-  end)
-
-  beastTitle = beastFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  beastTitle:SetPoint("TOPLEFT", 18, -16)
-  beastTitle:SetPoint("RIGHT", -36, 0)
-  beastTitle:SetJustifyH("LEFT")
-
-  beastSub = beastFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  beastSub:SetPoint("TOPLEFT", beastTitle, "BOTTOMLEFT", 0, -4)
-  beastSub:SetJustifyH("LEFT")
-
-  local list = CreateFrame("Frame", nil, beastFrame, BACKDROP)
-  list:SetPoint("TOPLEFT", 14, -SUB_TOP)
-  list:SetPoint("BOTTOMRIGHT", -14, SUB_BOTTOM)
-  if list.SetBackdrop then
-    list:SetBackdrop({
-      bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-      edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-      tile = true, tileSize = 16, edgeSize = 14,
-      insets = { left = 3, right = 3, top = 3, bottom = 3 },
-    })
-    list:SetBackdropColor(0, 0, 0, 0.55)
-    list:SetBackdropBorderColor(0.6, 0.6, 0.6, 1)
-  end
-
-  beastScroll = CreateFrame("ScrollFrame", "DinosPetSkillsBeastsScroll", list, "FauxScrollFrameTemplate")
-  beastScroll:SetPoint("TOPLEFT", 4, -5)
-  beastScroll:SetPoint("BOTTOMRIGHT", -28, 5)
-  beastScroll:SetScript("OnVerticalScroll", function(self, offset)
-    FauxScrollFrame_OnVerticalScroll(self, offset, SUB_ROW_H, updateBeastList)
-  end)
-
-  beastRowsUI = {}
-  for i = 1, SUB_NUM_ROWS do
-    local b = CreateFrame("Button", nil, list)
-    b:SetHeight(SUB_ROW_H)
-    b:SetPoint("TOPLEFT", list, "TOPLEFT", 8, -6 - (i - 1) * SUB_ROW_H)
-    b:SetPoint("RIGHT", list, "RIGHT", -30, 0)
-    b:RegisterForClicks("LeftButtonUp")
-    local hl = b:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints()
-    hl:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
-    hl:SetBlendMode("ADD")
-    hl:SetAlpha(0.45)
-    b.right = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    b.right:SetPoint("RIGHT", -4, 0)
-    b.right:SetJustifyH("RIGHT")
-    b.left = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    b.left:SetPoint("LEFT", 4, 0)
-    b.left:SetPoint("RIGHT", b.right, "LEFT", -6, 0)
-    b.left:SetJustifyH("LEFT")
-    if b.left.SetWordWrap then b.left:SetWordWrap(false) end
-    b.left:SetHeight(SUB_ROW_H)
-    b:SetScript("OnClick", function(self)
-      if not self.entry then return end
-      local cmd = SlashCmdList and SlashCmdList["FBPETHUNTER"]
-      if cmd then pcall(cmd, "search " .. ns.BeastName(self.entry.b)) end
-    end)
-    b:SetScript("OnEnter", function(self)
-      if self.entry and selectedRank then beastTooltip(self, self.entry, selectedRank.rec, selectedRank.r) end
-    end)
-    b:SetScript("OnLeave", GameTooltip_Hide)
-    beastRowsUI[i] = b
-  end
-
-  beastFooter = beastFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  beastFooter:SetPoint("BOTTOMLEFT", 18, 14)
-  beastFooter:SetPoint("RIGHT", -18, 0)
-  beastFooter:SetJustifyH("LEFT")
-  applyFontSize()
-  beastFrame:Hide()
-end
-
-local function toggleBeastPanel(row)
-  if not beastFrame then buildBeastFrame() end
-  if selectedRank and selectedRank.rec == row.rec and selectedRank.r == row.r and beastFrame:IsShown() then
-    selectedRank = nil
-    beastFrame:Hide()
-  else
-    selectedRank = { rec = row.rec, r = row.r, beasts = row.beasts or {} }
-    FauxScrollFrame_SetOffset(beastScroll, 0)
-    beastScroll:SetVerticalScroll(0)
-    beastFrame:Show()
-    updateBeastList()
-  end
 end
 
 -- ------------------------------------------------------------------ Hauptliste rendern
@@ -342,8 +168,19 @@ local function renderRow(btn, row)
   btn.icon:Hide(); btn.toggle:Hide()
   btn.left:ClearAllPoints(); btn.right:SetText("")
   btn.bg:Hide()
-  if row.kind == "skill" then
+  if row.kind == "header" then
+    btn.bg:SetColorTexture(0.15, 0.25, 0.35, 0.35)
+    btn.bg:Show()
+    btn.left:SetPoint("LEFT", btn, "LEFT", 6, 0)
+    btn.left:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
+    btn.left:SetText(row.title)
+  elseif row.kind == "skill" then
     local rec = row.rec
+    if isSharedSkill(rec) then
+      btn.bg:SetColorTexture(0.15, 0.65, 1, 0.14)
+    else
+      btn.bg:SetColorTexture(1, 0.82, 0, 0.08)
+    end
     btn.bg:Show()
     btn.icon:SetTexture(ns.IconPath(rec.icon)); btn.icon:Show()
     local isOpen = expandedSkill[rec.key]
@@ -369,25 +206,13 @@ local function renderRow(btn, row)
   elseif row.kind == "rank" then
     local rec, r = row.rec, row.r
     local rk = rec.ranks[r] or {}
-    local isSel = selectedRank and selectedRank.rec == rec and selectedRank.r == r and beastFrame and beastFrame:IsShown()
-    if isSel then
-      btn.bg:SetColorTexture(0.2, 0.6, 1, 0.18)
-      btn.bg:Show()
-    else
-      btn.bg:SetColorTexture(1, 0.82, 0, 0.08)
-    end
     btn.left:SetPoint("LEFT", btn, "LEFT", 32, 0)
     btn.left:SetPoint("RIGHT", btn.right, "LEFT", -8, 0)
-    local status = row.learned and (ns.CHECK .. " " .. ns.GREEN .. "Rang " .. r .. "|r")
-      or (ns.CROSS .. " " .. ns.RED .. "Rang " .. r .. "|r")
-    local lv = rk.l and (ns.GREY .. "  · Stufe " .. rk.l .. "|r") or ""
+    local status = row.learned and (ns.CHECK .. " " .. ns.GREEN .. "Rang " .. r .. " · Erlernt|r")
+      or (ns.CROSS .. " " .. ns.RED .. "Rang " .. r .. " · Fehlt|r")
     local pet = ns.PetHas(rec.key, r) and ("  " .. petHint()) or ""
-    btn.left:SetText(status .. lv .. pet)
-    if row.total > 0 then
-      btn.right:SetText((isSel and ns.CYAN or "|cffffd100") .. row.total .. (row.total == 1 and " Tier »|r" or " Tiere »|r"))
-    else
-      btn.right:SetText(ns.GREY .. "–|r")
-    end
+    btn.left:SetText(status .. pet)
+    btn.right:SetText(rk.l and (ns.GREY .. "ab Pet-Stufe " .. rk.l .. "|r") or "")
   end
   btn:Show()
 end
@@ -410,11 +235,9 @@ local function onRowClick(btn)
     if bCollapse then
       bCollapse:SetText(next(expandedSkill) and "Alle zuklappen" or "Alle aufklappen")
     end
-  elseif row.kind == "rank" then
-    toggleBeastPanel(row)
+    buildRows()
+    updateList()
   end
-  buildRows()
-  updateList()
 end
 
 local function onRowEnter(btn)
@@ -425,8 +248,11 @@ local function onRowEnter(btn)
   elseif row.kind == "skill" then
     GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
     GameTooltip:AddLine(ns.SkillName(row.rec))
-    local fam = famList(row.rec, 20)
-    if fam ~= "" then GameTooltip:AddLine(fam, 0.8, 0.8, 0.8, true) end
+    if isSharedSkill(row.rec) then
+      GameTooltip:AddLine("★ Allgemeine Pet-Fähigkeit (für mehrere Tierfamilien)", 0.4, 0.87, 1, true)
+    end
+    local fam = famListFull(row.rec)
+    if fam ~= "" then GameTooltip:AddLine("Familien: " .. fam, 0.85, 0.85, 0.85, true) end
     GameTooltip:AddLine(("%d von %d Rängen dauerhaft erlernt"):format(ns.LearnedCount(row.rec), #ns.RankList(row.rec)), 1, 1, 1)
     GameTooltip:AddLine("Klicken: Ränge auf-/zuklappen", 0.5, 0.5, 0.5)
     GameTooltip:Show()
@@ -441,8 +267,6 @@ local function updateHeader()
   local pct = t > 0 and math.floor(l * 100 / t) or 0
   progressText:SetText(("%d / %d Ränge dauerhaft erlernt  (%d%%)"):format(l, t, pct))
   if ns.activePetName then
-    local n = 0
-    for _ in pairs(ns.activePetSkills) do n = n + 1 end
     petLine:SetText(("Aktuelles Pet: %s%s|r %s(%s)|r"):format(ns.CYAN, ns.activePetName,
       ns.GREY, ns.activePetFamily and ns.FamilyName(ns.activePetFamily) or (UnitCreatureFamily and UnitCreatureFamily("pet") or "?")))
   else
@@ -452,7 +276,7 @@ local function updateHeader()
   for key, b in pairs(filterButtons) do
     if key == mode then b:LockHighlight() else b:UnlockHighlight() end
   end
-  footer:SetText(ns.GREY .. "Klick auf Fähigkeit = Ränge zeigen · Klick auf Rang = Tiere im Seitenfenster|r")
+  footer:SetText(ns.GREY .. "Klick auf eine Fähigkeit = Ränge auf-/zuklappen|r")
 end
 
 function ns.RefreshUI()
@@ -461,7 +285,6 @@ function ns.RefreshUI()
   updateHeader()
   buildRows()
   updateList()
-  if beastFrame and beastFrame:IsShown() then updateBeastList() end
 end
 
 -- ------------------------------------------------------------------ Hauptfenster bauen
@@ -485,7 +308,7 @@ local function build()
   if type(pt) == "table" and pt[1] then
     frame:SetPoint(pt[1], UIParent, pt[2], pt[3], pt[4])
   else
-    frame:SetPoint("CENTER", -80, 0)
+    frame:SetPoint("CENTER")
   end
   if frame.SetBackdrop then
     frame:SetBackdrop({
@@ -500,8 +323,6 @@ local function build()
   frame:SetScript("OnShow", function()
     if PlaySound and SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_OPEN then pcall(PlaySound, SOUNDKIT.IG_CHARACTER_INFO_OPEN) end
     wipe(expandedSkill)
-    selectedRank = nil
-    if beastFrame then beastFrame:Hide() end
     if bCollapse then bCollapse:SetText("Alle aufklappen") end
     ns.ImportFromFBPH()
     ns.ScanCraft()
@@ -509,7 +330,6 @@ local function build()
     ns.RefreshUI()
   end)
   frame:SetScript("OnHide", function()
-    if beastFrame then beastFrame:Hide() end
     if PlaySound and SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_CLOSE then pcall(PlaySound, SOUNDKIT.IG_CHARACTER_INFO_CLOSE) end
   end)
 
@@ -690,9 +510,9 @@ local function build()
   end
   applyFontSize()
 
-  -- Fuß: Auf-/Zuklappen + Kurzhilfe
-  bCollapse = makeButton(frame, "Alle aufklappen", 110)
-  bCollapse:SetPoint("BOTTOMRIGHT", -18, 16)
+  -- Fuß: Button zu Forever Bestiary + Auf-/Zuklappen
+  bCollapse = makeButton(frame, "Alle aufklappen", 112)
+  bCollapse:SetPoint("BOTTOMRIGHT", -16, 15)
   bCollapse:SetScript("OnClick", function(self)
     local anyOpen = next(expandedSkill) ~= nil
     wipe(expandedSkill)
@@ -702,9 +522,27 @@ local function build()
     self:SetText(anyOpen and "Alle aufklappen" or "Alle zuklappen")
     ns.RefreshUI()
   end)
+
+  bBestiary = makeButton(frame, "Forever Bestiary", 136)
+  bBestiary:SetPoint("RIGHT", bCollapse, "LEFT", -6, 0)
+  local fbIco = bBestiary:CreateTexture(nil, "ARTWORK")
+  fbIco:SetSize(14, 14)
+  fbIco:SetPoint("LEFT", 6, 0)
+  fbIco:SetTexture("Interface\\Icons\\Ability_Hunter_BeastTaming")
+  fbIco:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  bBestiary:SetText("   Forever Bestiary")
+  bBestiary:SetScript("OnClick", function() openForeverBestiary("") end)
+  bBestiary:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:AddLine("Forever Bestiary öffnen", 1, 0.82, 0)
+    GameTooltip:AddLine("Öffnet das Hauptfenster von Forever Bestiary (Pet Hunter), um Wildtiere & Fundorte nachzuschlagen.", 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  bBestiary:SetScript("OnLeave", GameTooltip_Hide)
+
   footer = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  footer:SetPoint("BOTTOMLEFT", 20, 22)
-  footer:SetPoint("RIGHT", bCollapse, "LEFT", -8, 0)
+  footer:SetPoint("BOTTOMLEFT", 20, 21)
+  footer:SetPoint("RIGHT", bBestiary, "LEFT", -8, 0)
   footer:SetJustifyH("LEFT")
 end
 

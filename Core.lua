@@ -292,7 +292,13 @@ function ns.BuildCatalog()
     for k, slug in pairs(type(fdb.famAlias) == "table" and fdb.famAlias or {}) do famIndex[k] = slug end
     for slug, n in pairs(type(fdb.familyNames) == "table" and fdb.familyNames or {}) do famIndex[ns.norm(n)] = slug end
   end
-  table.sort(ns.skills, function(a, b) return ns.norm(ns.SkillName(a)) < ns.norm(ns.SkillName(b)) end)
+  -- Sortierung: Allgemeine für (fast) alle Pets zuerst ("common" / "general"), danach Familien-Spezialfähigkeiten
+  local KIND_ORDER = { general = 1, common = 1, special = 2 }
+  table.sort(ns.skills, function(a, b)
+    local ka, kb = KIND_ORDER[a.kind] or 2, KIND_ORDER[b.kind] or 2
+    if ka ~= kb then return ka < kb end
+    return ns.norm(ns.SkillName(a)) < ns.norm(ns.SkillName(b))
+  end)
   ns.BuildSources()
   ns.catalogDirty = false
 end
